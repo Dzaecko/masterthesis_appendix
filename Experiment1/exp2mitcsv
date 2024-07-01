@@ -1,0 +1,248 @@
+import os
+import json
+import random
+import json
+import subprocess
+import os
+from pathlib import Path
+os.environ["OPENAI_API_KEY"] = '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'
+import os
+import json
+from packaging import version
+from mistralai.client import MistralClient
+from mistralai.models.chat_completion import ChatMessage
+import os
+import openai
+from openai import OpenAI
+import re
+import json
+import sys 
+import urllib.request
+endpoint = "https://agilecopilot1.openai.azure.com/"
+api_key = "4e87e184a87346eda3fb015436357b99"
+gpt4dep = "userstory"
+gpt3dep = "Bewerber"
+
+import logging
+import sys
+import re
+import time
+import subprocess
+from openai import AzureOpenAI
+import ssl
+import sys
+import ast
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.llms.openai import OpenAI
+import csv
+import urllib.request
+
+from llama_index.core.callbacks import CallbackManager
+from llama_index.core import (
+    VectorStoreIndex,
+    SimpleDirectoryReader,
+    StorageContext,
+    load_index_from_storage,
+)
+total_time = 0
+call_count = 0
+unprocessed_count = 0
+
+def is_valid_version(ver):
+    """ Überprüfen, ob die gegebene Version eine gültige semantische Versionsnummer ist. """
+    try:
+        version.Version(ver)
+        return True
+    except version.InvalidVersion:
+        return False
+
+def process_product_info(product, versions, cve_id, vector_score):
+    # Hier könnte die Logik stehen, um die Produktinformationen weiterzuverarbeiten
+    print(f"Processing: CVE ID: {cve_id}, Product: {product}, Versions: {versions}, CVSS Vector String: {vector_score}")
+    global total_time, call_count, unprocessed_count
+    
+    # Startzeit des Aufrufs messen
+    start_time = time.time()
+    endpoint = "https://cog-adgpt-dev-01.openai.azure.com/"
+    api_key = "a2e4e810bc5941c991dfd1f0d3794548"
+    deployment = "gpt-4"
+
+    client = AzureOpenAI(
+        base_url=f"{endpoint}/openai/deployments/{deployment}/extensions",
+        api_key=api_key,
+        api_version="2023-09-01-preview",
+    )
+
+   
+
+    completion = client.chat.completions.create(
+        model=deployment,
+       messages = [
+    {
+        "role": "user",
+        "content": (
+            f"Are there any known vulnerabilities in {product} {versions}? Please provide the JSON data for cve_number with the following format: "
+            '{"Software": "<software_name>", "Version": "<version_number>", "VulnerabilityTypes": "<vulnerability_type>", "CVE-IDs": "<cve_id>", "vectorString": "<vectorString>"}'
+            " If there are multiple CVE-IDs, CWE-IDs or VulnerabilityTypes, please separate them with a comma. "
+            'Example: {"Software": "MYSQL", "Version": "5.5", "VulnerabilityTypes": "denial of service, xss", '
+            '"CVE-IDs": "CVE-ID-2022, CVE-ID-6672, CVE-ID-32322", "vectorString": "CVSS:3.1/AC:L/AV:A/A:H/C:H/I:H/PR:H/S:C/UI:N"}'
+        )
+    },
+],
+        extra_body={
+            "dataSources": [
+                {
+                    "type": "AzureCognitiveSearch",
+                    "parameters": {
+                        "endpoint": "https://searchdzaeck.search.windows.net",
+                        "key": "lTgs2jnUdSxVsomLDanPGXPg6aC8rS6naq4qhU6UpPAzSeCMt3fW",
+                        "queryType": "vectorSemanticHybrid",
+                        "semanticConfiguration" : "vector-1713602691777-ragnew-semantic-configuration",
+                        "fieldsMapping": {},
+                        "inScope": "true",                 
+                        "strictness": 3,
+                        "topNDocuments": 5,
+                        "roleInformation": "You are a helpful assistant.  ",
+                        "indexName": "vector-1713602691777-ragnew",
+                        "embeddingDeploymentName": "text-embedding-ada-002"
+                    }
+                }
+            ]        
+        }, 
+    
+        temperature=0,
+        top_p=1,
+        max_tokens=800,  
+    )
+    json_objects = []
+
+    json_objects = []
+    json_matches = re.findall(r'\{.*?\}', completion.choices[0].message.content, re.DOTALL)
+    for match in json_matches:
+        try:
+            json_data = json.loads(match)
+            json_objects.append(json_data)
+        except json.JSONDecodeError:
+            print("Fehler beim Parsen:", match)
+            continue
+
+        # Überprüfen der CVE-IDs
+        extracted_cve_ids = json_data.get("CVE-IDs", "").split(", ")
+        for cve_id in extracted_cve_ids:
+            filename = f"{cve_id}.json"
+            file_path = os.path.join(folder_path, filename)
+            if os.path.exists(file_path):
+                print(f"Datei gefunden: {file_path}")
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    data = json.load(file)
+                    affected_versions = []
+                    for container in data.get('containers', {}).get('cna', {}).get('affected', []):
+                        for entry in container.get('versions', []):
+                            if entry['status'] == 'affected':
+                                version_text = entry.get('version', '')
+                                less_than_version = entry.get('lessThan', '')
+                                less_than_equal_version = entry.get('lessThanOrEqual', '')
+                                version_range = entry.get('version', '') if '-' in entry.get('version', '') else None
+
+                                # Verarbeite 'lessThan', 'lessThanOrEqual' und 'prior to version'
+                                if less_than_version:
+                                    affected_versions.append(f"less than {less_than_version}")
+                                if less_than_equal_version:
+                                    affected_versions.append(f"<= {less_than_equal_version}")
+                                if 'prior to version' in version_text:
+                                    prior_version = re.search(r"prior to version (\d+\.\d+\.\d+)", version_text).group(1)
+                                    affected_versions.append(f"less than {prior_version}")
+                                if version_range:
+                                    start_version, end_version = version_range.split('-')
+                                    affected_versions.append((start_version, end_version))
+
+                                if version_text and version_text not in ['n/a', '*', 'unspecified', less_than_version, less_than_equal_version]:
+                                    affected_versions.append(version_text)
+                                if version_text and version_text not in ['n/a', '*', 'unspecified'] and is_valid_version(version_text):
+                                    affected_versions.append(version_text)
+                    # Überprüfe jede bereitgestellte Version gegen die gesammelten Bedingungen  
+                    matched_versions = []
+                    for check_version in versions:
+                        for aff_version in affected_versions:
+                            if isinstance(aff_version, tuple):  # Behandle Versionsbereiche
+                                start_version, end_version = aff_version
+                                if version.parse(start_version) <= version.parse(check_version) <= version.parse(end_version):
+                                    matched_versions.append(check_version)
+                                    print(f"Schlussfolgerung: {check_version} liegt zwischen {start_version} und {end_version} für CVE-ID {cve_id}.")
+                            elif "less than " in aff_version:
+                                max_version = aff_version.split("less than ")[1]
+                                if version.parse(check_version) < version.parse(max_version):
+                                    matched_versions.append(check_version)
+                                    print(f"Schlussfolgerung: {check_version} ist kleiner als {max_version} für CVE-ID {cve_id}.")
+                            elif aff_version.startswith("<= "):
+                                max_version = aff_version.split("<= ")[1]
+                                if version.parse(check_version) <= version.parse(max_version):
+                                    matched_versions.append(check_version)
+                                    print(f"Schlussfolgerung: {check_version} ist kleiner oder gleich {max_version} für CVE-ID {cve_id}.")
+
+                    if matched_versions:
+                        print(f"Übereinstimmung gefunden für CVE-ID {cve_id} in Versionen: {matched_versions}")
+                    else:
+                        print(f"Keine Übereinstimmung gefunden für CVE-ID {cve_id} in den angegebenen Versionen.")
+            else:
+                print(f"Keine Datei gefunden für CVE-ID: {cve_id}")
+
+    end_time = time.time()
+    call_duration = end_time - start_time
+    total_time += call_duration
+    call_count += 1
+
+    if call_count > 0:
+        average_time = total_time / call_count
+        print(f"Gesamtlaufzeit: {total_time} Sekunden, Durchschnittliche Dauer eines Aufrufs: {average_time} Sekunden, Nicht verarbeitbare Datensätze: {unprocessed_count}")
+
+def extract_product_versions(folder_path):
+    files = [f for f in os.listdir(folder_path) if f.endswith('.json')]
+    random.shuffle(files)  # Mischen der gesamten Dateiliste
+    results = []
+    version_pattern = re.compile(r'^\d+\.\d+(\.\d+)?$')
+    # Liste der spezifischen Softwarekomponenten
+    software_list = [
+        "nginx", "apache", "phpmyadmin", "mariadb", 
+        "wordpress", "drupal", "samba", "postgresql", "postfix",
+        "openssh", "BIND", "Exim", "Squid", "Dovecot", 
+        "vsftpd", "proftpd", "openvpn", "gitea"
+    ]
+
+    while files and len(results) < 100:
+        filename = files.pop()  # Entferne die zuletzt ausgewählte Datei aus der Liste
+        with open(os.path.join(folder_path, filename), 'r', encoding='utf-8') as file:
+            data = json.load(file)
+            cve_metadata = data.get('cveMetadata', {})
+            cve_id = cve_metadata.get('cveId', 'No CVE ID found')
+
+            if cve_metadata.get('state') == 'PUBLISHED':
+                containers = data.get('containers', {})
+                for container in containers.values():
+                    affected = container.get('affected', [])
+                    metrics = container.get('metrics', [])
+
+                    # Suche nach dem cvssV3.1 vectorString
+                    vector_score = None
+                    for metric in metrics:
+                        if 'cvssV3_1' in metric and 'vectorString' in metric['cvssV3_1']:
+                            vector_score = metric['cvssV3_1']['vectorString']
+                            break
+
+                    if vector_score:
+                        for entry in affected:
+                            product = entry.get('product')
+                            if product:  # Prüfe, ob Produkt nicht None ist
+                                product_lower = product.lower()
+                                valid_versions = [v['version'] for v in entry.get('versions', []) if v['status'] == 'affected' and v['version'] not in ['n/a', '*'] and version_pattern.match(v['version'])]
+                                # Stelle sicher, dass genau eine gültige Version vorhanden ist
+                                if len(valid_versions) == 1 and product_lower not in ['windows', 'microsoft'] and any(soft.lower() in product_lower for soft in software_list):
+                                    results.append((product, valid_versions[0], cve_id, vector_score))
+                                    # Hier kann der Aufruf zu `process_product_info` mit der spezifischen Version erfolgen
+                                    process_product_info(product, valid_versions, cve_id, vector_score)
+
+    random.shuffle(results)  # Durchmischen der Ergebnisse
+
+if __name__ == '__main__':
+    folder_path = r'C:\Users\Dzaecko\Downloads\cvelistV5-main\cvelistV5-main\cvelist'
+    extract_product_versions(folder_path)
